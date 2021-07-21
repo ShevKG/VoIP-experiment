@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>GGS-socket-io-experiment</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+
+  <script src="node_modules/socket.io/client-dist/socket.io.js" type="text/javascript"></script>
+  <script src="node_modules/recordrtc/RecordRTC.js"></script>
+  <script>
+    if (location.href.indexOf('file:') == 0) {
+        document.write('<h1 style="color:red;">Please load this HTML file on HTTP or HTTPS.</h1>');
+    }
+  </script>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+
+
+
+  <body>
+    <div>
+
+      <p>
+        <audio id="audioCheck" style="width: 94%;"></audio>
+      </p>
+
+      <div style="display:none;">
+        <label id="percentage">Ffmpeg Progress 0%</label>
+        <progress id="progress-bar" value="0" max="100"></progress>
+        <br />
+    </div>
+
+     <button id="start-recording">Начать запись</button>
+     <button id="stop-recording">Остановить запись</button>
+   </div>
+  </body>
+
+  <script type="text/javascript">
+     let socketio = io();
+
+     let mediaStream = null;
+
+     socketio.on('connect', function() {
+       startRecording.disabled = false;
+     });
+
+     let startRecording = document.getElementById('start-recording');
+     let stopRecording = document.getElementById('stop-recording');
+     let audioCheck = document.getElementById('audioCheck');
+
+     let progressBar = document.querySelector('#progress-bar');
+     let percentage = document.querySelector('#percentage');
+     let interval;
+
+
+     let recordAudio;
+
+     startRecording.onclick = recordInChunks;
+
+
+     navigator.mediaDevices.getUserMedia({ audio: true })
+           .then(function(stream) {
+             console.log('You let me use your mic!')
+           })
+           .catch(function(err) {
+             console.log('No mic for you!')
+           });
+
+
+     function onRecordingStarted() {
+       startRecording.disabled = true;
+       navigator.getUserMedia({
+         audio: true
+       }, function(stream) {
+         mediaSteam = stream;
+
+         recordAudio = RecordRTC(stream, {
+           type: 'audio',
+           numberOfAudioChannels: 1,
+           desiredSampleRate: 8000,
+           recorderType: StereoAudioRecorder
+         });
+
+         recordAudio.startRecording();
+         stopRecording.disabled = false;
+       }, function(error) {
+           alert(JSON.stringify(error));
+       });
+     }
+
+
+//#region recordInChunks------------------------------------------------------------------------------
+
+  function recordInChunks() {
+    startRecording.dsiabled = true;
+    navigator.getUserMedia({
+      audio: true
+    }, function(stream) {
+      mediaStream = stream;
+
+      recordAudio = RecordRTC(stream, {
+        type: 'audio',
+        numberOfAudioChannels: 1,
+        desiredSampleRate: 8000,
+        timeSlice: 100,
+        ondataavailable: function(blob) {
+          console.log(blob);
+          socketio.emit('message', blob);
+
+          /*recordAudio.getDataURL(function(audioDataURL) {
+            var files = {
+              audio: {
+                type: recordAudio.getBlob().type || 'audio/wav',
+                dataURL : audioDataURL
+              }
+            };
+            socketio.emit('message', files);
+          });*/
+        },
+        recorderType: StereoAudioRecorder
+      });
+
+      audioCheck.src = '';
+      recordAudio.startRecording();
+      stopRecording.disabled = false;
+    }, function(error) {
+      alert(JSON.stringify(error));
+    });
+
+    /*  recordAudio.stopRecording(function() {
+        //получение URL конкретно для аудио RecordRTC
+        recordAudio.getDataURL(function(audioDataURL) {
+          var files = {
+            audio: {
+              type: recordAudio.getBlob().type || 'audio/wav',
+              dataURL : audioDataURL
+            }
+          };
+
+          socketio.emit('message', files);
+          if (mediaStream) mediaStream.stop();
+        });
+
+        audioCheck.src = '';
+        //audioCheck.poster = 'ajax-loader.gif';
+      });*/
+  }
+
+//#endredtion recordInChunks------------------------------------------------------------------------------
+
+
+     stopRecording.onclick = function() {
+       startRecording.disabled = false;
+       stopRecording.disabled = true;
+
+       recordAudio.stopRecording(function() {
+         //получение URL конкретно для аудио RecordRTC
+         audioCheck.src = '';
+         socketio.emit('stop-recording');
+         //audioCheck.poster = 'ajax-loader.gif';
+       });
+     };
+
+     socketio.on('merged', function(fileName) {
+         var href = (location.href.split('/').pop().length ? location.href.replace(location.href.split('/').pop(), '') : location.href);
+
+         href = href + '/uploads/' + fileName;
+
+        console.log('got file ' + href);
+
+        audioCheck.src = href;
+        audioCheck.play();
+        audioCheck.muted = false;
+        audioCheck.controls = true;
+     });
+
+
+     socketio.on('ffmpeg-output', function(result) {
+         if (parseInt(result) >= 100) {
+             progressBar.parentNode.style.display = 'none';
+             return;
+         }
+         progressBar.parentNode.style.display = 'block';
+         progressBar.value = result;
+         percentage.innerHTML = 'Ffmpeg Progress ' + result + "%";
+     });
+
+     socketio.on('ffmpeg-error', function(error) {
+         alert(error);
+     });
+
+
+
+
+     function smallChunksRecording() {
+       startRecording.disabled = true;
+       stopRecording.disabled = false;
+
+       recordAudio.stopRecording(function() {
+         //получение URL конкретно для аудио RecordRTC
+         recordAudio.getDataURL(function(audioDataURL) {
+           var files = {
+             audio: {
+               type: recordAudio.getBlob().type || 'audio/wav',
+               dataURL : audioDataURL
+             }
+           };
+
+           socketio.emit('message', files);
+           if (mediaStream) mediaStream.stop();
+         });
+
+         audioCheck.src = '';
+         //audioCheck.poster = 'ajax-loader.gif';
+       });
+     };
+
+ </script>
+</html>

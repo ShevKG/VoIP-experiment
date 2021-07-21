@@ -1,0 +1,16 @@
+{
+  "name": "socket-io-server",
+  "version": "0.0.1",
+  "preferGlobal": true,
+  "description": "send wav containers through websockets",
+  "dependencies": {
+    "recordrtc": "latest",
+    "fluent-ffmpeg": "latest",
+    "node-uuid": "^1.4.1",
+    "socket.io": "latest",
+    "node-rtp": "latest"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
