@@ -1,11 +1,14 @@
+
 const http = require('http');
-const server = http.createServer(app);
+//const server = http.createServer(app);
 const url = require('url');
 const fs = require('fs');
 const uuid = require('node-uuid');
 const port = 3001;
+const Readable = require('stream');
+const stream = require('stream');
 
-
+console.log(Readable);
 let fileSequance = 0;
 
 
@@ -48,7 +51,7 @@ var app = http.createServer(function(request, response) {
 const path = require('path');
 const exec = require('child_process').exec;
 
-var io = require('socket.io')(app);
+let io = require('socket.io')(app);
 
   console.log(`listening on: ${port}`);
 
@@ -60,8 +63,9 @@ io.sockets.on('connection', function(socket) {
     console.log("sss");
     socket.emit('ffmpeg-output', 0);
 
-    writeToDisk(data, fileName + '.wav');
-    merge(socket, fileName);
+    //writeToDisk(data, fileName + '.wav');
+    convert(socket, data);
+    //merge(socket, fileName);
   });
 
   socket.on('stop-recording', function() {
@@ -74,7 +78,7 @@ io.sockets.on('connection', function(socket) {
 
 
 function writeToDisk(data, fileName) {
-  var fileExtension = fileName.split('.').pop(),
+  let fileExtension = fileName.split('.').pop(),
   fileRootNameWithBase = './uploads/' + fileName,
   filePath = fileRootNameWithBase,
   fileID = 2,
@@ -92,6 +96,44 @@ function writeToDisk(data, fileName) {
   console.log('filePath', filePath);
 }
 
+function convert(socket, data) {
+  let FFmpeg = require('fluent-ffmpeg');
+  let buffer = new Buffer(data, 'base64');
+  let bufferStream = new stream.PassThrough();
+  let bufferStream_new = new stream.PassThrough();
+  bufferStream.end(buffer);
+  console.log("before");
+  console.log(bufferStream);
+
+
+  
+  let audioFile_new = path.join(__dirname, 'uploads', fileSequance.toString() + '111-pcm_mulaw.wav');
+
+
+  new FFmpeg({
+    source: bufferStream
+  })
+  .audioCodec('pcm_mulaw')
+  .on('error', function(err) {
+    socket.emit('ffmpeg-error', 'ffmpeg : сообщение ошибки: ' + err.message);
+  })
+  .on('progress', function(progress) {
+    socket.emit('ffmpeg-output', Math.round(progress.percent));
+    console.log("progress")
+  })
+  .on('end', function(){
+    //socket.emit('merged', dateTimeString + fileName + '-pcm_mulaw.wav');
+    console.log('Formating finished!');
+    //fs.unlinkSync(audioFile);
+    console.log("after");
+    //console.log(this.Buffer);
+  })
+  .writeToStream(bufferStream_new);
+
+  console.log(bufferStream_new);
+  fileSequance++;
+}
+
 function merge(socket, fileName) {
   let FFmpeg = require('fluent-ffmpeg');
   let curDateAndTime = new Date();
@@ -99,6 +141,9 @@ function merge(socket, fileName) {
   console.log('\n\n\n\n\n' + dateTimeString + '\n\n\n\n\n\n\n\n');
   let audioFile = path.join(__dirname, 'uploads', fileName + '.wav');
   let audioFile_new = path.join(__dirname, 'uploads', fileSequance.toString() + '-' + dateTimeString + fileName + '-pcm_mulaw.wav');
+
+  
+
   new FFmpeg({
     source: audioFile
   })
@@ -108,11 +153,13 @@ function merge(socket, fileName) {
   })
   .on('progress', function(progress) {
     socket.emit('ffmpeg-output', Math.round(progress.percent));
+    console.log("progress")
   })
   .on('end', function(){
     socket.emit('merged', dateTimeString + fileName + '-pcm_mulaw.wav');
     console.log('Formating finished!');
     fs.unlinkSync(audioFile);
+    console.log("end");
   })
   .saveToFile(audioFile_new);
 
@@ -120,12 +167,12 @@ function merge(socket, fileName) {
 }
 
 
-var	udp = require('dgram'),
+/*var	udp = require('dgram'),
 		Buffer = require('buffer').Buffer,
   	RtpPacket = require('../lib/rtppacket').RtpPacket,
 		fd, sock, rtp, intvl, buf, bytesRead, ip, port,
 	writeData = function() {
-		if ((bytesRead = fs.readSync(fd, buf, 0, buf.length)) > 0) {
+		if ((bytesRead = fs.readFileSync(fd, buf, 0, buf.length)) > 0) {
 			if (!rtp)
 				rtp = new RtpPacket(buf);
 			else
@@ -147,4 +194,4 @@ ip = "192.168.98.1";
 port = 60000;
 buf = new Buffer(320);
 fd = fs.openSync('audio.g711', 'r');
-intvl = setInterval(writeData, 20);
+intvl = setInterval(writeData, 20);*/

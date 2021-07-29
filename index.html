@@ -67,7 +67,7 @@
            });
 
 
-     function onRecordingStarted() {
+    /* function onRecordingStarted() {
        startRecording.disabled = true;
        navigator.getUserMedia({
          audio: true
@@ -86,7 +86,7 @@
        }, function(error) {
            alert(JSON.stringify(error));
        });
-     }
+     }*/
 
 
 //#region recordInChunks------------------------------------------------------------------------------
@@ -100,13 +100,15 @@
 
       recordAudio = RecordRTC(stream, {
         type: 'audio',
+        mimeType: 'audio/wav',
         numberOfAudioChannels: 1,
-        desiredSampleRate: 8000,
-        timeSlice: 100,
+        desiredSampRate: 8000,
+        timeSlice: 3000,
         ondataavailable: function(blob) {
           console.log(blob);
+         
           socketio.emit('message', blob);
-
+      
           /*recordAudio.getDataURL(function(audioDataURL) {
             var files = {
               audio: {
