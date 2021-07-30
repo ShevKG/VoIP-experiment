@@ -97,17 +97,18 @@
       audio: true
     }, function(stream) {
       mediaStream = stream;
-
+      let key = false;
       recordAudio = RecordRTC(stream, {
         type: 'audio',
         mimeType: 'audio/wav',
         numberOfAudioChannels: 1,
-        desiredSampRate: 8000,
-        timeSlice: 3000,
+        //desiredSampRate: 8000,
+        timeSlice: 5000,
         ondataavailable: function(blob) {
           console.log(blob);
-         
-          socketio.emit('message', blob);
+         if (key != true)
+            socketio.emit('message', blob);
+          key = true;
       
           /*recordAudio.getDataURL(function(audioDataURL) {
             var files = {
