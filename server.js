@@ -4,11 +4,18 @@ const http = require('http');
 const url = require('url');
 const fs = require('fs');
 const uuid = require('node-uuid');
-const port = 3001;
+const port = 3000;
+const ip = "192.168.98.222";
 const Readable = require('stream');
 const stream = require('stream');
+const WaveFile = require('wavefile').WaveFile;
+const udp = require('dgram');
+const RtpPacket = require('node-rtp/lib/rtppacket').RtpPacket;
+//variable for dubigging this freaking shitty code
+let timerVal = 10000;
+let	sock, rtp;
+let iter = 0;
 
-console.log(Readable);
 let fileSequance = 0;
 
 
@@ -58,14 +65,13 @@ let io = require('socket.io')(app);
 
 io.sockets.on('connection', function(socket) {
   socket.on('message', function(data) {
-    let fileName = uuid.v4();
-    console.log(data);
-    console.log("sss");
     socket.emit('ffmpeg-output', 0);
-
-    //writeToDisk(data, fileName + '.wav');
-    convert(socket, data);
-    //merge(socket, fileName);
+    let bufferNew = new Buffer(data, 'base64');
+    let wav = new WaveFile(bufferNew);
+    wav.toSampleRate(8000);
+    wav.toMuLaw();
+    let buffer = new Buffer.alloc(wav.toBuffer().length, wav.toBuffer(), 'base64');
+    createAndSendRtpFromBuffer(buffer, ip, 60000);
   });
 
   socket.on('stop-recording', function() {
@@ -96,102 +102,50 @@ function writeToDisk(data, fileName) {
   console.log('filePath', filePath);
 }
 
-function convert(socket, data) {
-  let FFmpeg = require('fluent-ffmpeg');
-  let buffer = new Buffer(data, 'base64');
-  let bufferStream = new stream.PassThrough();
-  let bufferStream_new = new stream.PassThrough();
-  bufferStream.end(buffer);
-  console.log("before");
-  console.log(bufferStream);
+function createAndSendRtpFromBuffer(data, ip, port) {
 
 
-  
-  let audioFile_new = path.join(__dirname, 'uploads', fileSequance.toString() + '111-pcm_mulaw.wav');
+  const bufferSize = 320;
 
+  let numberOfSlices  = Math.ceil(data.length / bufferSize);
+  let buffers = [];
 
-  new FFmpeg({
-    source: bufferStream
-  })
-  .audioCodec('pcm_mulaw')
-  .on('error', function(err) {
-    socket.emit('ffmpeg-error', 'ffmpeg : сообщение ошибки: ' + err.message);
-  })
-  .on('progress', function(progress) {
-    socket.emit('ffmpeg-output', Math.round(progress.percent));
-    console.log("progress")
-  })
-  .on('end', function(){
-    //socket.emit('merged', dateTimeString + fileName + '-pcm_mulaw.wav');
-    console.log('Formating finished!');
-    //fs.unlinkSync(audioFile);
-    console.log("after");
-    //console.log(this.Buffer);
-  })
-  .writeToStream(bufferStream_new);
+  let buffSliceIter = bufferSize - 1; // from (buffer[0] to buffer[bufferSize - 1])
+  let lastIndexOfSlice = 0;
 
-  console.log(bufferStream_new);
-  fileSequance++;
+  for(let i = 0; i < numberOfSlices; i++) {
+    buffers.push(data.slice(lastIndexOfSlice, buffSliceIter + 1));
+    lastIndexOfSlice = buffSliceIter + 1;
+    buffSliceIter += bufferSize;
 }
 
-function merge(socket, fileName) {
-  let FFmpeg = require('fluent-ffmpeg');
-  let curDateAndTime = new Date();
-  let dateTimeString = curDateAndTime.getHours().toString() + curDateAndTime.getMinutes().toString() + curDateAndTime.getMilliseconds().toString();
-  console.log('\n\n\n\n\n' + dateTimeString + '\n\n\n\n\n\n\n\n');
-  let audioFile = path.join(__dirname, 'uploads', fileName + '.wav');
-  let audioFile_new = path.join(__dirname, 'uploads', fileSequance.toString() + '-' + dateTimeString + fileName + '-pcm_mulaw.wav');
+  /*for (let i = 0; i < buffers.length; i++) {
 
-  
+  }*/
 
-  new FFmpeg({
-    source: audioFile
-  })
-  .audioCodec('pcm_mulaw')
-  .on('error', function(err) {
-    socket.emit('ffmpeg-error', 'ffmpeg : сообщение ошибки: ' + err.message);
-  })
-  .on('progress', function(progress) {
-    socket.emit('ffmpeg-output', Math.round(progress.percent));
-    console.log("progress")
-  })
-  .on('end', function(){
-    socket.emit('merged', dateTimeString + fileName + '-pcm_mulaw.wav');
-    console.log('Formating finished!');
-    fs.unlinkSync(audioFile);
-    console.log("end");
-  })
-  .saveToFile(audioFile_new);
+  buffers.forEach(function(buffer, i) {
+    if (!rtp)
+    {
+      rtp = new RtpPacket(buffer);
+    }
+    else
+    {
+      //console.log(`rtppacket: ${rtp.packet}`);
+      console.log("rtp time: " + rtp.time);
+      console.log("rtp seq: " + rtp.seq);
+      rtp.payload = buffer;
+      rtp.time += buffer.length;
+      rtp.seq++;
 
-  fileSequance++;
+
+
+      if (!sock)
+        sock = udp.createSocket('udp4');
+      setTimeout( () => { sock.send(rtp.packet, 0, rtp.packet.length, port, ip)
+      console.log("time pass: " + (5*(iter + 1) + "ms"));
+      iter++; }, 10 *(i + 1));
+   }
+  });
 }
 
 
-/*var	udp = require('dgram'),
-		Buffer = require('buffer').Buffer,
-  	RtpPacket = require('../lib/rtppacket').RtpPacket,
-		fd, sock, rtp, intvl, buf, bytesRead, ip, port,
-	writeData = function() {
-		if ((bytesRead = fs.readFileSync(fd, buf, 0, buf.length)) > 0) {
-			if (!rtp)
-				rtp = new RtpPacket(buf);
-			else
-				rtp.payload = buf;
-			rtp.time += buf.length;
-			rtp.seq++;
-			if (!sock)
-				sock = udp.createSocket('udp4');
-			sock.send(rtp.packet, 0, rtp.packet.length, port, ip);
-		} else {
-			if (intvl)
-				clearInterval(intvl);
-			fs.closeSync(fd);
-			if (sock)
-				sock.close(); // dgram module automatically listens on the port even if we only wanted to send... -_-
-		}
-	};
-ip = "192.168.98.1";
-port = 60000;
-buf = new Buffer(320);
-fd = fs.openSync('audio.g711', 'r');
-intvl = setInterval(writeData, 20);*/
