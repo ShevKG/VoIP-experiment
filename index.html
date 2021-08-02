@@ -18,7 +18,7 @@
 
 
   <body>
-    <div>
+    <div class="content-container">
 
       <p>
         <audio id="audioCheck" style="width: 94%;"></audio>
@@ -30,8 +30,9 @@
         <br />
     </div>
 
-     <button id="start-recording">Начать запись</button>
-     <button id="stop-recording">Остановить запись</button>
+     <button id="start-recording" style="border-radius: 360px; width: 75px; height: 75px;">ГГС</button>
+     <!--<button id="stop-recording">Остановить запись</button>-->
+     <p id="is-ready-text">В данный момент ничего не записывается</p>
    </div>
   </body>
 
@@ -45,7 +46,7 @@
      });
 
      let startRecording = document.getElementById('start-recording');
-     let stopRecording = document.getElementById('stop-recording');
+     let isReadyToRecord = document.getElementById('is-ready-text');
      let audioCheck = document.getElementById('audioCheck');
 
      let progressBar = document.querySelector('#progress-bar');
@@ -54,9 +55,24 @@
 
 
      let recordAudio;
+     startRecording.addEventListener("mousedown", recordInChunks);
+     startRecording.addEventListener("mouseup", onStopRecording);
 
-     startRecording.onclick = recordInChunks;
+     startRecording.onmousedown = function() {
+       isReadyToRecord.innerHTML = "ОЖИДАЙТЕ НАЧАЛА ЗАПИСИ";
+       isReadyToRecord.style.fontSize = "12px";
+       isReadyToRecord.style.color = "darkred";
+       setTimeout(function() {
+          isReadyToRecord.innerHTML = "Передача голосового сообщения";
+          isReadyToRecord.style.color = "green";
+       }, 300);
+     }
 
+     startRecording.onmouseup = function() {
+         isReadyToRecord.innerHTML = "В данный момент ничего не записывается";
+         isReadyToRecord.style.color = "black";
+         isReadyToRecord.style.fontSize = "auto";
+     }
 
      navigator.mediaDevices.getUserMedia({ audio: true })
            .then(function(stream) {
@@ -67,47 +83,24 @@
            });
 
 
-    /* function onRecordingStarted() {
-       startRecording.disabled = true;
-       navigator.getUserMedia({
-         audio: true
-       }, function(stream) {
-         mediaSteam = stream;
-
-         recordAudio = RecordRTC(stream, {
-           type: 'audio',
-           numberOfAudioChannels: 1,
-           desiredSampleRate: 8000,
-           recorderType: StereoAudioRecorder
-         });
-
-         recordAudio.startRecording();
-         stopRecording.disabled = false;
-       }, function(error) {
-           alert(JSON.stringify(error));
-       });
-     }*/
-
 
 //#region recordInChunks------------------------------------------------------------------------------
 
   function recordInChunks() {
-    startRecording.dsiabled = true;
+    //startRecording.disabled = true;
     navigator.getUserMedia({
       audio: true
     }, function(stream) {
       mediaStream = stream;
-
       recordAudio = RecordRTC(stream, {
         type: 'audio',
         mimeType: 'audio/wav',
         numberOfAudioChannels: 1,
-        desiredSampRate: 8000,
-        timeSlice: 3000,
+        //desiredSampRate: 8000,
+        timeSlice: 500,
         ondataavailable: function(blob) {
-          console.log(blob);
-         
           socketio.emit('message', blob);
+          console.log(blob);
       
           /*recordAudio.getDataURL(function(audioDataURL) {
             var files = {
@@ -148,20 +141,22 @@
       });*/
   }
 
-//#endredtion recordInChunks------------------------------------------------------------------------------
+//#endregion recordInChunks------------------------------------------------------------------------------
 
-
-     stopRecording.onclick = function() {
-       startRecording.disabled = false;
-       stopRecording.disabled = true;
-
-       recordAudio.stopRecording(function() {
-         //получение URL конкретно для аудио RecordRTC
-         audioCheck.src = '';
-         socketio.emit('stop-recording');
-         //audioCheck.poster = 'ajax-loader.gif';
-       });
+function onStopRecording() {
+      setTimeout(function() {
+          recordAudio.stopRecording(function() {
+            if (this.mediaStream) {
+              this.mediaStream.stop();
+            }
+            audioCheck.src = '';
+            socketio.emit('stop-recording');
+          });
+      },500)
      };
+
+
+     //startRecording.onmouseup = onStopRecording;
 
      socketio.on('merged', function(fileName) {
          var href = (location.href.split('/').pop().length ? location.href.replace(location.href.split('/').pop(), '') : location.href);
@@ -177,26 +172,8 @@
      });
 
 
-     socketio.on('ffmpeg-output', function(result) {
-         if (parseInt(result) >= 100) {
-             progressBar.parentNode.style.display = 'none';
-             return;
-         }
-         progressBar.parentNode.style.display = 'block';
-         progressBar.value = result;
-         percentage.innerHTML = 'Ffmpeg Progress ' + result + "%";
-     });
-
-     socketio.on('ffmpeg-error', function(error) {
-         alert(error);
-     });
-
-
-
-
      function smallChunksRecording() {
        startRecording.disabled = true;
-       stopRecording.disabled = false;
 
        recordAudio.stopRecording(function() {
          //получение URL конкретно для аудио RecordRTC

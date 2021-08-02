@@ -14,7 +14,7 @@ const RtpPacket = require('node-rtp/lib/rtppacket').RtpPacket;
 //variable for dubigging this freaking shitty code
 let timerVal = 10000;
 let	sock, rtp;
-let iter = 0;
+
 
 let fileSequance = 0;
 
@@ -65,7 +65,8 @@ let io = require('socket.io')(app);
 
 io.sockets.on('connection', function(socket) {
   socket.on('message', function(data) {
-    socket.emit('ffmpeg-output', 0);
+    let buffNum = data;
+    console.log(buffNum);
     let bufferNew = new Buffer(data, 'base64');
     let wav = new WaveFile(bufferNew);
     wav.toSampleRate(8000);
@@ -78,32 +79,13 @@ io.sockets.on('connection', function(socket) {
     console.log(`Before: fileSequance = ${fileSequance}`);
     fileSequance = 0;
     console.log(`After: fileSequance = ${fileSequance}`);
+    rtp.time = 0;
+    rtp.seq = Math.floor(1000 * Math.random());
   })
 });
 
 
-
-function writeToDisk(data, fileName) {
-  let fileExtension = fileName.split('.').pop(),
-  fileRootNameWithBase = './uploads/' + fileName,
-  filePath = fileRootNameWithBase,
-  fileID = 2,
-  fileBuffer;
-
-  while (fs.existsSync(filePath)) {
-    filePath = fileRootNameWithBase + '(' + fileID + ').' + fileExtension;
-    fileID += 1;
-  }
-
-  //dataURL = dataURL.split(',').pop();
-  fileBuffer = new Buffer(data, 'base64');
-  fs.writeFileSync(filePath, fileBuffer);
-
-  console.log('filePath', filePath);
-}
-
 function createAndSendRtpFromBuffer(data, ip, port) {
-
 
   const bufferSize = 320;
 
@@ -114,7 +96,7 @@ function createAndSendRtpFromBuffer(data, ip, port) {
   let lastIndexOfSlice = 0;
 
   for(let i = 0; i < numberOfSlices; i++) {
-    buffers.push(data.slice(lastIndexOfSlice, buffSliceIter + 1));
+    buffers.push(data.slice(lastIndexOfSlice, buffSliceIter));
     lastIndexOfSlice = buffSliceIter + 1;
     buffSliceIter += bufferSize;
 }
@@ -123,29 +105,57 @@ function createAndSendRtpFromBuffer(data, ip, port) {
 
   }*/
 
-  buffers.forEach(function(buffer, i) {
-    if (!rtp)
-    {
-      rtp = new RtpPacket(buffer);
+  let iter = 0;
+  let interval = setInterval(function() {
+        if (iter < buffers.length) {
+            if (iter == 0) {
+                buffers[iter] = new Buffer(buffers[iter].slice(80, buffers[iter].length));
+            }
+            if (!rtp)
+            {
+             rtp = new RtpPacket(buffers[iter]);
+            }
+            else
+            {
+            //console.log(`rtppacket: ${rtp.packet}`);
+
+            rtp.payload = buffers[iter];
+            rtp.time += buffers[iter].length;
+            rtp.seq++;
+            console.log("------------RTP---PACKET-----------");
+            console.log(rtp.packet);
+            console.log("-----------------------------------");
+            console.log("rtp time: " + rtp.time);
+            console.log("rtp seq: " + rtp.seq);
+            
+            if (!sock)
+                sock = udp.createSocket('udp4');
+            sock.send(rtp.packet, 0, rtp.packet.length, port, ip);
+            iter++;
+        }      
     }
-    else
-    {
-      //console.log(`rtppacket: ${rtp.packet}`);
-      console.log("rtp time: " + rtp.time);
-      console.log("rtp seq: " + rtp.seq);
-      rtp.payload = buffer;
-      rtp.time += buffer.length;
-      rtp.seq++;
-
-
-
-      if (!sock)
-        sock = udp.createSocket('udp4');
-      setTimeout( () => { sock.send(rtp.packet, 0, rtp.packet.length, port, ip)
-      console.log("time pass: " + (5*(iter + 1) + "ms"));
-      iter++; }, 10 *(i + 1));
-   }
-  });
+    else {
+        iter = 0;
+        clearInterval(interval);
+    } 
+  }, 20);
 }
 
-
+function writeToDisk(data, fileName) {
+    let fileExtension = fileName.split('.').pop(),
+    fileRootNameWithBase = './uploads/' + fileName,
+    filePath = fileRootNameWithBase,
+    fileID = 2,
+    fileBuffer;
+  
+    while (fs.existsSync(filePath)) {
+      filePath = fileRootNameWithBase + '(' + fileID + ').' + fileExtension;
+      fileID += 1;
+    }
+  
+    //dataURL = dataURL.split(',').pop();
+    fileBuffer = new Buffer(data, 'base64');
+    fs.writeFileSync(filePath, fileBuffer);
+  
+    console.log('filePath', filePath);
+  }

@@ -24,6 +24,26 @@ a:focus {
   color: #000;
 }
 
-a: active {
-  color: #000;
+.content-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#start-recording {
+  border: 0;
+  margin: 20px 20px 0;
+  display: flex;
+  border: 3px inset steelblue;
+  background: lightsteelblue;
+  align-items: center;
+  justify-content: center;
+}
+
+#start-recording:hover {
+  background:#B0D4DE;
+}
+
+#start-recording:active {
+  background-color: orangered;
 }
