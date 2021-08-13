@@ -5,7 +5,6 @@ const udp = require('dgram');
 const path = require('path');
 const port = 3000;
 const ip = "0.0.0.0";
-//const ip = "192.168.98.222";
 const WaveFile = require('wavefile').WaveFile;
 const RtpPacket = require('node-rtp/lib/rtppacket').RtpPacket;
 const waveheaders = require('wav-headers');
