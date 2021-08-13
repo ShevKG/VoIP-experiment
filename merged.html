@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+
+<head>
+    <meta charset="utf-8">
+    <title>GGS-socket-io-experiment</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<script src="node_modules/socket.io/client-dist/socket.io.js" type="text/javascript"></script>
+<script src="node_modules/recordrtc/RecordRTC.js"></script>
+<script src="javascript/pcm-player-master/pcm-player.js"></script>
+
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+
+<body>
+    <div class="content-container">
+        <button id="start-recording" style="border-radius: 360px; width: 75px; height: 75px;">ГГС</button>
+        <!--<button id="stop-recording">Остановить запись</button>-->
+        <p id="is-ready-text">В данный момент ничего не записывается</p>
+    </div>
+</body>
+
+<script type="text/javascript">
+    let socketio = io("localhost:3000");
+    let mediaStream = null;
+
+    socketio.on("connect_error", (err) => { console.log(`connect_error due to ${err.message}); }`) });
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function (stream) {
+            console.log('You let me use your mic!')
+        })
+        .catch(function (err) {
+            console.log('No mic for you!')
+        });
+
+    let startRecording = document.getElementById('start-recording');
+    let isReadyToRecord = document.getElementById('is-ready-text');
+
+    let progressBar = document.querySelector('#progress-bar');
+    let percentage = document.querySelector('#percentage');
+    let interval;
+
+    let recordAudio;
+    startRecording.addEventListener("mousedown", recordInChunks);
+    startRecording.addEventListener("mouseup", onStopRecording);
+
+    startRecording.onmousedown = function () {
+        isReadyToRecord.innerHTML = "ОЖИДАЙТЕ НАЧАЛА ЗАПИСИ";
+        isReadyToRecord.style.fontSize = "12px";
+        isReadyToRecord.style.color = "darkred";
+        setTimeout(function () {
+            isReadyToRecord.innerHTML = "Передача голосового сообщения";
+            isReadyToRecord.style.color = "green";
+        }, 300);
+    }
+
+    startRecording.onmouseup = function () {
+        startRecording.disabled = true;
+        isReadyToRecord.innerHTML = "Остановка записи";
+        isReadyToRecord.style.color = "black";
+        setTimeout(function () {
+            isReadyToRecord.innerHTML = "В данный момент ничего не записывается";
+            isReadyToRecord.style.color = "black";
+            isReadyToRecord.style.fontSize = "auto";
+        }, 500)
+    }
+
+
+    socketio.on('connect', function () {
+        console.log("CONNECTED WITH SOCKET-SERVER");
+    });
+
+    let player = new PCMPlayer({
+        inputCodec: 'Int8',
+        channels: 1,
+        sampleRate: 8000,
+        flushTime: 10
+    })
+
+    let key = false;
+
+    socketio.on('recieve-and-play', function (data, socketid) {
+        console.log("receieved");
+        let uint8 = new Uint8Array(data.payload);
+        console.log(data.duration);
+        if (socketid != socketio.id) {
+            player.feed(uint8);
+            player.flushTime = Math.ceil(data.duration);
+        }
+        
+    });
+
+
+    let fileReader = new FileReader();
+
+    function recordInChunks() {
+        socketio.emit('id', socketio.id);
+        navigator.getUserMedia({
+            audio: true
+        }, function (stream) {
+            mediaStream = stream;
+            recordAudio = RecordRTC(stream, {
+                type: 'audio',
+                mimeType: 'audio/wav',
+                numberOfAudioChannels: 1,
+                timeSlice: 500,
+                ondataavailable: function (blob) {
+                    socketio.emit('message', blob);
+                },
+                recorderType: StereoAudioRecorder
+            });
+            recordAudio.startRecording();
+            //stopRecording.disabled = false;
+        }, function (error) {
+            alert(JSON.stringify(error));
+        });
+    }
+
+    function onStopRecording() {
+        socketio.emit('delete-id');
+        setTimeout(function () {
+            recordAudio.stopRecording(function () {
+                if (this.mediaStream) {
+                    this.mediaStream.stop();
+                }
+                socketio.emit('stop-recording');
+            });
+            startRecording.disabled = false;
+        }, 500)
+    };
+
+
+
+    window.onbeforeunload = onRefreshPage;
+
+
+    function onRefreshPage() {
+        document.body.style.backgroundColor = "red";
+        socketio.emit("manual-disconnection", socketio.id);
+        socketio.close();
+    }
+
+</script>
+
+</html>
